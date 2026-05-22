@@ -1,68 +1,93 @@
 # How to mint the two GBIF download DOIs for this replication
 
-The H&J 2007 scale-replication uses **two** GBIF occurrence downloads
-for Iberian birds — one modern (post-2000) as the atlas-equivalent
-data, one historical (pre-2000) as the range-map-equivalent data.
+The H&J 2007 scale-replication uses **two GBIF occurrence downloads in
+parallel** as two separate basis-of-record (BoR) strategies:
 
-`notebooks/01_data_download.py` will run end-to-end in three modes:
+| Strategy | Code | basisOfRecord values | DOI |
+|---|---|---|---|
+| Museum + sensors | `museum` | `PRESERVED_SPECIMEN`, `MACHINE_OBSERVATION` | `10.15468/dl.r8pcat` (download key `0008222-260519110011954`) — **minted 2026-05-22** |
+| All observations (incl. citizen-science) | `allbor` | `HUMAN_OBSERVATION`, `PRESERVED_SPECIMEN`, `MACHINE_OBSERVATION` | **to be minted** |
 
-1. **Pre-minted keys hardcoded** — recommended. Mint once via the GBIF
-   web UI (instructions below), paste the keys + DOIs into
-   `01_data_download.py`, then the notebook fetches the zips by URL.
-   No GBIF credentials needed at execution time. This is the CI mode.
+**No year filter** is applied at the download stage. The year split into
+modern (`year >= 2000`, atlas-equivalent) vs historical (`year < 2000`,
+range-map-equivalent via per-species convex-hull EOO) happens in
+`notebooks/02_data_clean.py`. One DOI per strategy therefore serves both
+year windows for that strategy.
 
-2. **API-mint via env vars** — fall-through. If the hardcoded keys
-   are still `TODO_MINT_*` AND the env vars `GBIF_USER`, `GBIF_PWD`,
+`notebooks/01_data_download.py` runs in three modes:
+
+1. **Pre-minted keys hardcoded** — recommended. Mint via the GBIF web UI,
+   paste the key + DOI into the notebook (or set the env vars below),
+   then the notebook fetches the zips by URL. No GBIF credentials needed
+   at execution time. This is the CI mode.
+
+2. **API-mint via env vars** — fall-through. If the hardcoded keys are
+   still `TODO_MINT_*` AND the env vars `GBIF_USER`, `GBIF_PWD`,
    `GBIF_EMAIL` are set, the notebook mints fresh downloads via the
-   GBIF API and polls until they complete.
+   GBIF API and polls until complete.
 
-3. **Synthetic demo fallback** — final fallback. If neither of the
-   above succeeds, the notebook generates a deterministic synthetic
-   dataset and flags every downstream artefact as `synthetic=True`.
-   The pipeline runs end-to-end but the result is a structural smoke
-   test, not a real replication.
+3. **Per-strategy synthetic demo fallback** — final fallback. If a
+   strategy's key is unminted AND env vars are absent, the notebook
+   generates a deterministic synthetic dataset *for that strategy only*
+   and flags every downstream artefact as `synthetic=true` for that
+   strategy. The other strategy still uses real data.
+
+## Override via env vars
+
+To pass keys without editing the notebook (CI / one-off runs):
+
+```bash
+# Strategy A — museum + sensors (already-minted defaults)
+export GBIF_MUSEUM_DL_KEY="0008222-260519110011954"
+export GBIF_MUSEUM_DL_DOI="10.15468/dl.r8pcat"
+
+# Strategy B — all observations (mint these, then export)
+export GBIF_ALLBOR_DL_KEY="<download key from GBIF mint>"
+export GBIF_ALLBOR_DL_DOI="<DOI returned by GBIF>"
+
+pixi run snakemake --cores 1
+```
 
 ## How to mint via the GBIF web UI
 
 1. Sign in to https://www.gbif.org/.
 
-2. **Modern dataset (post-2000)** — open this pre-filtered search URL:
+2. **Strategy A — museum + sensors** (already minted). The minted
+   filter URL is:
 
    ```
-   https://www.gbif.org/occurrence/search?taxon_key=212&country=ES&country=PT&country=AD&country=GI&has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=PRESERVED_SPECIMEN&basis_of_record=MACHINE_OBSERVATION&occurrence_year=2000,2030
+   https://www.gbif.org/occurrence/search?taxon_key=212&country=ES&country=PT&country=AD&country=GI&has_coordinate=true&has_geospatial_issue=false&basis_of_record=PRESERVED_SPECIMEN&basis_of_record=MACHINE_OBSERVATION
    ```
 
-   Click **Download -> Simple (SIMPLE_CSV)**, wait for the DOI to
-   mint (~5-15 min), then copy the download key and DOI into the
-   `GBIF_MODERN_DL_KEY` / `GBIF_MODERN_DL_DOI` variables near the top
-   of `notebooks/01_data_download.py`.
+   (No year filter.) DOI: `10.15468/dl.r8pcat`. Download key:
+   `0008222-260519110011954`.
 
-3. **Historical dataset (pre-2000)** — open this pre-filtered URL:
+3. **Strategy B — all observations (incl. citizen-science)** — to mint.
+   Open this pre-filtered URL:
 
    ```
-   https://www.gbif.org/occurrence/search?taxon_key=212&country=ES&country=PT&country=AD&country=GI&has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=PRESERVED_SPECIMEN&basis_of_record=MACHINE_OBSERVATION&occurrence_year=1900,1999
+   https://www.gbif.org/occurrence/search?taxon_key=212&country=ES&country=PT&country=AD&country=GI&has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=PRESERVED_SPECIMEN&basis_of_record=MACHINE_OBSERVATION
    ```
 
-   Same mint flow. Paste into `GBIF_HISTORICAL_DL_KEY` /
-   `GBIF_HISTORICAL_DL_DOI`.
+   Click **Download -> Simple (SIMPLE_CSV)**, wait for the DOI to mint
+   (~5-15 min for the smaller museum set; allbor is much larger and
+   may take longer), then export `GBIF_ALLBOR_DL_KEY` and
+   `GBIF_ALLBOR_DL_DOI` (or paste them into the notebook).
 
-4. Commit the updated `notebooks/01_data_download.py`. CI will pick up
-   the new keys on its next run.
+4. Commit the updated key/DOI defaults if you want CI to pick them up
+   without env vars.
 
 ## Predicate verification
 
-The pre-filtered URLs apply these predicates (mirrored in
+The URLs above apply these predicates (mirrored in
 `01_data_download.py` for the source registry):
 
 - `taxonKey = 212` — class Aves (ACCEPTED). Verify at
   https://api.gbif.org/v1/species/match?name=Aves&rank=class.
 - `country IN (ES, PT, AD, GI)` — Spain, Portugal, Andorra, Gibraltar.
 - `hasCoordinate = TRUE`, `hasGeospatialIssue = FALSE`.
-- `basisOfRecord IN (HUMAN_OBSERVATION, PRESERVED_SPECIMEN, MACHINE_OBSERVATION)`.
-- `year >= 2000` (modern) or `year <= 1999` (historical).
-
-These predicates also live in `01_data_download.py` for downstream
-audit (source registry JSON).
+- `basisOfRecord IN (...)` — per-strategy list (see table above).
+- (No year filter — the split is done in `02_data_clean.py`.)
 
 ## Reproducibility note
 

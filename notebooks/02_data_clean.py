@@ -14,39 +14,45 @@
 # ---
 
 # %% [markdown]
-# # 02 — Data clean (Iberian birds, HEALPix-NESTED ladder)
+# # 02 — Data clean (Iberian birds, HEALPix-NESTED ladder, two BoR strategies)
 #
-# Bins the two GBIF inputs from `01_data_download.py` onto a HEALPix
-# **NESTED** ladder of Nside in {16, 32, 64, 128, 256, 512}, producing
-# per-Nside per-cell species presence/richness:
+# Bins **each of the two BoR-strategy GBIF zips** from
+# `01_data_download.py` onto a HEALPix **NESTED** ladder of Nside in
+# {16, 32, 64, 128, 256, 512}, with a **year-stage split at the cleaning
+# step**:
 #
-# 1. **Modern (post-2000) GBIF -> per-cell species richness (atlas-eq).**
-#    For each occurrence record, compute its HEALPix NESTED pixel ID at
-#    each Nside via `healpix_geo.nested.lonlat_to_healpix`. Then
-#    per-Nside richness = number of distinct species observed in each cell.
+# - `year >= 2000` -> **modern** frame = "atlas-equivalent". Per-cell
+#   species richness = number of distinct species observed in the cell.
+# - `year < 2000`  -> **historical** frame = "range-map-equivalent". Per
+#   species, build the convex hull of pre-2000 occurrences (Shapely);
+#   for each Nside, the hull's HEALPix-NESTED cell coverage is computed
+#   via `healpix_geo.nested.polygon_coverage`; per-cell richness = number
+#   of species whose hull covers the cell.
 #
-# 2. **Historical (pre-2000) GBIF -> per-species convex-hull EOO -> per-cell
-#    richness (range-map-eq).** For each species, build the convex hull
-#    of its historical occurrence points; for each Nside, identify which
-#    HEALPix cells the hull polygon covers; richness = number of
-#    species whose hull covers the cell.
+# Conceptually we relabel modern as `atlas` and historical as `rangemap`
+# downstream (they are the H&J 2007 analogues, and the year-window source
+# is now an implementation detail of the substitute).
 #
-# Outputs (under `data/clean/`):
+# Two strategies x two sources = four per-cell richness arrays per Nside,
+# per strategy. The output layout:
 #
-# - `richness_per_nside.nc` — one NetCDF with dims (`nside`, `cell`) and
-#   variables `richness_modern`, `richness_historical`. Sparse: only
-#   cells that fall in the Iberia bbox; cells with zero species are
-#   present with richness=0 (so the Wilcoxon test in 03 has matched
-#   pairs).
-# - `species_eoo_polygons.parquet` — per-species WKT polygons + record
-#   counts (audit trail for the EOO substitute).
-# - `clean_report.json` — counts that 03 sanity-checks against.
+# - `data/clean/richness_<strategy>.nc` — one NetCDF per strategy, with
+#   one NetCDF group per Nside, each group holding `richness_atlas` and
+#   `richness_rangemap` variables on the `cell` dimension. Different
+#   per-Nside cell counts prevent a single rectangular array.
+# - `data/clean/species_eoo_polygons.parquet` — per-strategy, per-species
+#   convex-hull WKT polygons + record counts. `strategy` column.
+# - `data/clean/clean_report.json` — per-strategy record / species
+#   counts + which strategy is synthetic.
 #
 # **Domain conventions enforced** (`DOMAIN.md`):
 #
-# - HEALPix indexing is always **NESTED** at every Nside; `healpix-geo`
-#   not `healpy`.
+# - HEALPix indexing is always **NESTED** at every Nside;
+#   `healpix-geo` (geographic, WGS84-aware), never `healpy`.
 # - Intermediate arrays use **NetCDF** + **Parquet**; never `.npz`.
+# - Per-strategy synthetic flag is honoured — synthetic data is not
+#   silently mixed with real data; the report json calls it out and
+#   downstream artefacts carry the flag.
 
 # %%
 import json
@@ -64,21 +70,20 @@ from shapely.geometry import MultiPoint, Polygon
 # ## Constants
 #
 # - **HEALPix ladder** = Nside in {16, 32, 64, 128, 256, 512}, each
-#   NESTED. Corresponding `depth = log2(Nside)` is the value the
-#   `healpix-geo` API takes (depth = 4, 5, 6, 7, 8, 9). At Nside=16 the
-#   cell side ~220 km; at Nside=512 it's ~7 km — bracketing H&J's
-#   0.25°-2° range comfortably (DOMAIN.md / spec).
+#   NESTED. Cell side ~407 km at Nside=16 down to ~13 km at Nside=512 —
+#   bracketing H&J's 0.25°-2° range comfortably.
 # - **Iberia bbox** matches the prior sibling chain (-10..4 lon,
-#   35..44 lat) so cell sets are comparable.
-# - **Ellipsoid** = "WGS84" — geo-aware, not pure sphere.
+#   35..44 lat).
+# - **Ellipsoid** = "WGS84".
 
 # %%
+STRATEGIES = ["museum", "allbor"]
 NSIDES = [16, 32, 64, 128, 256, 512]
 DEPTHS = {n: int(np.log2(n)) for n in NSIDES}
 
 ELLIPSOID = "WGS84"
+YEAR_SPLIT = 2000  # year >= 2000 -> modern (atlas), year < 2000 -> historical
 
-# Iberia bounding box (lon_min, lat_min, lon_max, lat_max).
 IBERIA_LON_MIN, IBERIA_LAT_MIN = -10.0, 35.0
 IBERIA_LON_MAX, IBERIA_LAT_MAX = 4.0, 44.0
 
@@ -89,27 +94,39 @@ RAW_DIR = DATA / "raw"
 CLEAN_DIR = DATA / "clean"
 CLEAN_DIR.mkdir(parents=True, exist_ok=True)
 
-GBIF_MODERN_ZIP = GBIF_DIR / "birds_iberia_modern.zip"
-GBIF_HISTORICAL_ZIP = GBIF_DIR / "birds_iberia_historical.zip"
-SYNTHETIC_FLAG = RAW_DIR / "USING_SYNTHETIC_DEMO_DATA.txt"
+STRATEGY_ZIPS = {
+    "museum": GBIF_DIR / "birds_iberia_museum.zip",
+    "allbor": GBIF_DIR / "birds_iberia_allbor.zip",
+}
+STRATEGY_SYNTH_FLAGS = {
+    "museum": RAW_DIR / "USING_SYNTHETIC_DEMO_DATA_museum.txt",
+    "allbor": RAW_DIR / "USING_SYNTHETIC_DEMO_DATA_allbor.txt",
+}
+STRATEGY_RICHNESS_NC = {
+    s: CLEAN_DIR / f"richness_{s}.nc" for s in STRATEGIES
+}
 
-RICHNESS_NC = CLEAN_DIR / "richness_per_nside.nc"
 EOO_PARQUET = CLEAN_DIR / "species_eoo_polygons.parquet"
 CLEAN_REPORT = CLEAN_DIR / "clean_report.json"
 
-SYNTHETIC = SYNTHETIC_FLAG.exists()
+SYNTHETIC = {s: STRATEGY_SYNTH_FLAGS[s].exists() for s in STRATEGIES}
 print(f"ROOT       = {ROOT}")
+print(f"STRATEGIES = {STRATEGIES}")
 print(f"NSIDES     = {NSIDES}")
+print(f"YEAR_SPLIT = {YEAR_SPLIT} (>= modern, < historical)")
 print(f"SYNTHETIC  = {SYNTHETIC}")
 
 report: dict = {
     "written_on": date.today().isoformat(),
-    "synthetic_data": SYNTHETIC,
+    "strategies": STRATEGIES,
+    "year_split": YEAR_SPLIT,
+    "synthetic_per_strategy": SYNTHETIC,
     "nsides": NSIDES,
     "iberia_bbox": {
         "lon": [IBERIA_LON_MIN, IBERIA_LON_MAX],
         "lat": [IBERIA_LAT_MIN, IBERIA_LAT_MAX],
     },
+    "per_strategy": {},
 }
 
 
@@ -118,10 +135,8 @@ report: dict = {
 #
 # Enumerate all global cells at each depth, transform centres to
 # lon/lat via `healpix_geo.nested.healpix_to_lonlat`, keep those whose
-# centre falls inside the Iberia bbox. Per the NESTED parent invariant
-# (`parent = child >> 2`) cells at coarser Nside are exact unions of
-# their fine-Nside children — useful for sanity-checks but not relied
-# upon here (each Nside is enumerated independently for robustness).
+# centre falls inside the Iberia bbox. (Computed once; reused for both
+# strategies and both sources.)
 
 # %%
 def iberian_pix(depth: int, nside: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -130,18 +145,16 @@ def iberian_pix(depth: int, nside: int) -> tuple[np.ndarray, np.ndarray, np.ndar
     Returns (pix, lon, lat) — each shape (n_cells,)."""
     pix_all = np.arange(12 * nside * nside, dtype=np.uint64)
     lon, lat = hp_nested.healpix_to_lonlat(pix_all, depth, ELLIPSOID)
-    # healpix-geo returns lon in radians? Check by inspecting range.
-    # Per the API doc and tests, healpix-geo returns degrees.
-    # Normalise lon to [-180, 180].
     lon = np.where(lon > 180.0, lon - 360.0, lon)
     mask = (
         (lon >= IBERIA_LON_MIN) & (lon <= IBERIA_LON_MAX)
         & (lat >= IBERIA_LAT_MIN) & (lat <= IBERIA_LAT_MAX)
     )
-    return pix_all[mask].astype(np.int64), lon[mask].astype(np.float32), lat[mask].astype(np.float32)
+    return (pix_all[mask].astype(np.int64),
+            lon[mask].astype(np.float32),
+            lat[mask].astype(np.float32))
 
 
-# Quick sanity probe — print N cells at each depth.
 IBERIA_PIX: dict[int, np.ndarray] = {}
 IBERIA_LON: dict[int, np.ndarray] = {}
 IBERIA_LAT: dict[int, np.ndarray] = {}
@@ -150,24 +163,26 @@ for nside in NSIDES:
     IBERIA_PIX[nside] = pix
     IBERIA_LON[nside] = lon
     IBERIA_LAT[nside] = lat
-    print(f"  nside={nside:>4}  (depth={DEPTHS[nside]}): {len(pix):>7,} cells in Iberia bbox")
+    print(f"  nside={nside:>4}  (depth={DEPTHS[nside]}): "
+          f"{len(pix):>7,} cells in Iberia bbox")
 
 report["n_cells_per_nside"] = {n: int(len(IBERIA_PIX[n])) for n in NSIDES}
 
 
 # %% [markdown]
-# ## Load the two GBIF datasets
+# ## GBIF zip loader
+#
+# Reads the SIMPLE_CSV inside a GBIF download zip (tab-separated despite
+# the name). Filters to the Iberia bbox and drops rows with missing
+# essentials. Returns one DataFrame for the strategy.
 
 # %%
 def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
-    """Extract and read the SIMPLE_CSV inside a GBIF download zip.
-
-    GBIF SIMPLE_CSV is TAB-delimited despite the name. The synthetic
-    fallback writes the same TAB schema."""
+    """Extract and read the SIMPLE_CSV inside a GBIF download zip."""
     if not zip_path.exists():
         raise FileNotFoundError(
-            f"Expected GBIF zip at {zip_path} — re-run notebooks/01_data_download.py "
-            f"to populate it (real or synthetic)."
+            f"Expected GBIF zip at {zip_path} — re-run "
+            f"notebooks/01_data_download.py to populate it."
         )
     with zipfile.ZipFile(zip_path) as zf:
         candidates = [n for n in zf.namelist() if n.endswith(".csv")]
@@ -184,12 +199,13 @@ def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
                 },
                 dtype={"gbifID": "Int64", "year": "Int64",
                        "countryCode": "string"},
-                low_memory=False,
+                low_memory=False, on_bad_lines="skip",
             )
-    # Drop rows missing the essentials.
-    df = df.dropna(subset=["species", "decimalLatitude", "decimalLongitude"]).copy()
-    # Iberia bbox guard (synthetic data is already inside, but real GBIF
-    # downloads can include rare overseas-territory points).
+    # Drop rows missing the essentials (species, lat, lon, year — we need
+    # year for the modern/historical split).
+    df = df.dropna(
+        subset=["species", "decimalLatitude", "decimalLongitude", "year"]
+    ).copy()
     lon = df["decimalLongitude"].astype(float)
     lat = df["decimalLatitude"].astype(float)
     in_bbox = (
@@ -200,28 +216,16 @@ def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
     return df
 
 
-print("\n--- Loading GBIF zips ---")
-df_modern = load_gbif_csv(GBIF_MODERN_ZIP)
-df_historical = load_gbif_csv(GBIF_HISTORICAL_ZIP)
-print(f"  modern    : {len(df_modern):>10,} records, "
-      f"{df_modern['species'].nunique()} species")
-print(f"  historical: {len(df_historical):>10,} records, "
-      f"{df_historical['species'].nunique()} species")
-report["n_records_modern"] = int(len(df_modern))
-report["n_records_historical"] = int(len(df_historical))
-report["n_species_modern"] = int(df_modern["species"].nunique())
-report["n_species_historical"] = int(df_historical["species"].nunique())
-
-
 # %% [markdown]
-# ## Modern occurrences -> per-cell richness at each Nside
+# ## Per-strategy helpers
 #
-# For each Nside, assign each modern occurrence to its HEALPix-NESTED
-# cell, count the number of distinct species per cell. Cells with zero
-# species are NOT pre-populated here; we only emit cells with >=1
-# species observed (sparse representation). The merge step below
-# right-joins onto the full Iberian-cell index per Nside, filling
-# unseen cells with richness=0.
+# - `occurrences_to_richness` — per Nside, count distinct species per
+#   HEALPix-NESTED cell. Used for the modern (atlas) frame.
+# - `species_hull` — convex hull of a (lon, lat) point array with
+#   pragmatic fallbacks for n < 3.
+# - `hull_to_cells` — `healpix_geo.nested.polygon_coverage` of the hull.
+# - `historical_cell_counts` — per Nside, per-cell count of species
+#   whose EOO hull covers the cell, restricted to the Iberian cell set.
 
 # %%
 def occurrences_to_richness(df: pd.DataFrame, nside: int) -> pd.DataFrame:
@@ -242,30 +246,11 @@ def occurrences_to_richness(df: pd.DataFrame, nside: int) -> pd.DataFrame:
     )
 
 
-# %% [markdown]
-# ## Historical occurrences -> per-species convex-hull EOO -> per-cell
-#
-# Per species: compute the convex hull of all its historical points
-# (Shapely). For each Nside, find every HEALPix-NESTED cell that the
-# hull polygon covers via `healpix_geo.nested.polygon_coverage`. Per
-# cell, sum the number of species whose hull covers it -> richness.
-#
-# Edge case: a species with < 3 points has no real convex hull. For
-# 2 points we use a small buffer around the line; for 1 point we use
-# a small disc. These are pragmatic substitutes — they preserve the
-# species in the richness count without dominating it. Synthetic data
-# has 15+ points per species so this branch only matters for real GBIF
-# data with rare species.
-
-# %%
 def species_hull(points: np.ndarray) -> Polygon:
-    """Convex hull of a (lon, lat) point array. Tolerates n<3 by
-    buffering. Returns a Shapely Polygon."""
+    """Convex hull of a (lon, lat) point array with n<3 fallbacks."""
     if len(points) >= 3:
         mp = MultiPoint(points)
         hull = mp.convex_hull
-        # convex_hull may return a Point or LineString for collinear /
-        # duplicate points — buffer in that case.
         if hull.geom_type != "Polygon":
             hull = hull.buffer(0.05)
     elif len(points) == 2:
@@ -278,13 +263,8 @@ def species_hull(points: np.ndarray) -> Polygon:
 
 
 def hull_to_cells(hull: Polygon, depth: int) -> np.ndarray:
-    """Return the array of NESTED cell IDs covered by `hull` at `depth`.
-
-    healpix-geo's polygon_coverage expects an (n, 2) array of (lon, lat)
-    vertices forming a polygon WITHOUT holes."""
-    # Get the exterior ring as a (n, 2) numpy array.
+    """NESTED cell IDs covered by `hull` at `depth` via polygon_coverage."""
     exterior = np.asarray(hull.exterior.coords)[:, :2]
-    # polygon_coverage closes the polygon itself; pass the open ring.
     if np.allclose(exterior[0], exterior[-1]):
         exterior = exterior[:-1]
     if len(exterior) < 3:
@@ -295,52 +275,17 @@ def hull_to_cells(hull: Polygon, depth: int) -> np.ndarray:
     return np.asarray(cell_ids, dtype=np.int64)
 
 
-print("\n--- Building per-species EOO hulls (historical) ---")
-species_groups = df_historical.groupby("species")
-n_species = species_groups.ngroups
-eoo_records: list[dict] = []
-species_hulls: dict[str, Polygon] = {}
-
-for i, (sp, grp) in enumerate(species_groups, start=1):
-    pts = grp[["decimalLongitude", "decimalLatitude"]].astype(float).values
-    hull = species_hull(pts)
-    species_hulls[sp] = hull
-    eoo_records.append({
-        "species": sp,
-        "n_points": int(len(pts)),
-        "hull_area_sqdeg": float(hull.area),
-        "wkt": hull.wkt,
-    })
-    if i % 20 == 0 or i == n_species:
-        print(f"  built hull {i:>4}/{n_species}  ({sp[:32]}, area={hull.area:.2f} deg^2)")
-
-eoo_df = pd.DataFrame(eoo_records)
-eoo_df.to_parquet(EOO_PARQUET, index=False)
-print(f"  saved {EOO_PARQUET} "
-      f"({EOO_PARQUET.stat().st_size / 1e3:.1f} KB; "
-      f"{len(eoo_df)} species)")
-report["n_species_with_eoo"] = int(len(eoo_df))
-
-
-# %% [markdown]
-# ## Cross both data sources with each Iberian cell-set
-#
-# For each Nside, build a long DataFrame of (cell, richness_modern,
-# richness_historical). Cells absent from one of the two sources get
-# richness=0 there.
-
-# %%
 def historical_cell_counts(species_hulls: dict[str, Polygon],
                            nside: int,
                            iberian_set: set[int]) -> pd.DataFrame:
-    """Per-cell count of species whose EOO hull covers the cell, restricted
-    to cells inside the Iberian set."""
+    """Per-cell count of species whose EOO hull covers the cell, restricted to
+    Iberian cells."""
     depth = DEPTHS[nside]
     counts: dict[int, int] = {}
+    iberian_arr = np.fromiter(iberian_set, dtype=np.int64)
     for sp, hull in species_hulls.items():
         cells = hull_to_cells(hull, depth)
-        # Keep only Iberian cells.
-        cells = cells[np.isin(cells, list(iberian_set))]
+        cells = cells[np.isin(cells, iberian_arr)]
         for c in cells:
             counts[int(c)] = counts.get(int(c), 0) + 1
     if not counts:
@@ -351,106 +296,170 @@ def historical_cell_counts(species_hulls: dict[str, Polygon],
     ).astype({"cell": np.int64, "richness": np.int64})
 
 
-# Assemble per-Nside per-cell rich aligned across both sources.
-print("\n--- Cross-tabulating richness per Nside ---")
-records_per_nside: list[xr.Dataset] = []
-for nside in NSIDES:
-    iberian_pix = IBERIA_PIX[nside]
-    iberian_set = set(int(p) for p in iberian_pix)
-
-    # Modern: groupby.
-    mod = occurrences_to_richness(df_modern, nside)
-    mod = mod[mod["cell"].isin(iberian_set)].set_index("cell")
-
-    # Historical: from hulls.
-    hist = historical_cell_counts(species_hulls, nside, iberian_set).set_index("cell")
-
-    # Align on the full Iberian cell index.
-    df = pd.DataFrame({"cell": iberian_pix}).set_index("cell")
-    df["richness_modern"] = mod["richness"].reindex(df.index, fill_value=0).astype(np.int32)
-    df["richness_historical"] = hist["richness"].reindex(df.index, fill_value=0).astype(np.int32)
-    df["lon"] = IBERIA_LON[nside]
-    df["lat"] = IBERIA_LAT[nside]
-
-    n_cells = len(df)
-    mean_mod = df["richness_modern"].mean()
-    mean_hist = df["richness_historical"].mean()
-    overlap_zero_zero = ((df["richness_modern"] == 0) & (df["richness_historical"] == 0)).sum()
-    print(f"  nside={nside:>4}  "
-          f"n_cells={n_cells:>6,}  "
-          f"mean_richness mod={mean_mod:5.2f}, hist={mean_hist:5.2f}  "
-          f"zero-zero cells={overlap_zero_zero:>5,}")
-
-    ds = xr.Dataset(
-        data_vars={
-            "richness_modern": (("cell",), df["richness_modern"].values,
-                                {"long_name": "Per-cell species richness from modern GBIF (atlas-equivalent)",
-                                 "units": "n_species"}),
-            "richness_historical": (("cell",), df["richness_historical"].values,
-                                    {"long_name": "Per-cell species richness from historical EOO hulls (range-map-equivalent)",
-                                     "units": "n_species"}),
-        },
-        coords={
-            "cell": ("cell", df.index.values.astype(np.int64),
-                     {"long_name": f"HEALPix NESTED pixel index (nside={nside})"}),
-            "lon": ("cell", df["lon"].values,
-                    {"units": "degrees_east"}),
-            "lat": ("cell", df["lat"].values,
-                    {"units": "degrees_north"}),
-        },
-        attrs={
-            "nside": nside,
-            "depth": DEPTHS[nside],
-            "ellipsoid": ELLIPSOID,
-            "healpix_ordering": "NESTED",
-        },
-    )
-    records_per_nside.append(ds.expand_dims(nside=[nside]))
-
-
 # %% [markdown]
-# ## Persist — one NetCDF per Nside (different cell-counts per Nside
-# prevent a single (nside, cell) dataset from being rectangular).
+# ## Process each strategy
 #
-# We save each Nside as its own group in the same NetCDF file via the
-# `group=` argument. Downstream code (03_analysis.py) iterates the
-# groups.
+# Load the zip -> split by year -> per-Nside per-cell richness arrays
+# (atlas + rangemap) -> persist as one NetCDF per strategy.
 
 # %%
-# Strategy: write each per-Nside Dataset as a separate group in the
-# same NetCDF file. This sidesteps the rectangular-shape constraint
-# (each Nside has a different n_cells) without splitting across files.
-# Note: NetCDF group nesting requires netcdf4 engine.
-print(f"\n--- Saving {RICHNESS_NC} (one group per nside) ---")
-# Clean any prior file (netcdf4 group write mode='a' needs the file present;
-# easier to start fresh).
-if RICHNESS_NC.exists():
-    RICHNESS_NC.unlink()
+all_eoo_records: list[dict] = []
 
-for ds in records_per_nside:
-    nside = int(ds.nside.values[0])
-    # Drop the singleton nside dim — it's the group name.
-    ds_to_save = ds.squeeze("nside", drop=True)
-    ds_to_save.to_netcdf(
-        RICHNESS_NC,
-        mode="a" if RICHNESS_NC.exists() else "w",
-        group=f"nside_{nside}",
-        engine="netcdf4",
-        encoding={
-            "richness_modern": {"zlib": True, "complevel": 4},
-            "richness_historical": {"zlib": True, "complevel": 4},
-        },
-    )
-size_mb = RICHNESS_NC.stat().st_size / 1e6
-print(f"  saved {RICHNESS_NC}  ({size_mb:.2f} MB)")
-report["richness_nc"] = str(RICHNESS_NC.relative_to(ROOT))
-report["richness_nc_size_mb"] = round(size_mb, 2)
+for strategy in STRATEGIES:
+    print(f"\n{'='*60}")
+    print(f"=== Strategy: {strategy}  (synthetic={SYNTHETIC[strategy]}) ===")
+    print(f"{'='*60}")
+    zip_path = STRATEGY_ZIPS[strategy]
+    nc_path = STRATEGY_RICHNESS_NC[strategy]
+
+    df_all = load_gbif_csv(zip_path)
+    df_modern = df_all[df_all["year"].astype(int) >= YEAR_SPLIT].copy()
+    df_historical = df_all[df_all["year"].astype(int) < YEAR_SPLIT].copy()
+    print(f"  loaded     : {len(df_all):>10,} records, "
+          f"{df_all['species'].nunique()} species "
+          f"(years {int(df_all['year'].min()) if len(df_all) else 'NA'}"
+          f"..{int(df_all['year'].max()) if len(df_all) else 'NA'})")
+    print(f"  modern     : {len(df_modern):>10,} records, "
+          f"{df_modern['species'].nunique()} species  (>= {YEAR_SPLIT})")
+    print(f"  historical : {len(df_historical):>10,} records, "
+          f"{df_historical['species'].nunique()} species  (< {YEAR_SPLIT})")
+
+    strat_report: dict = {
+        "synthetic": SYNTHETIC[strategy],
+        "n_records_total": int(len(df_all)),
+        "n_species_total": int(df_all["species"].nunique()),
+        "n_records_modern": int(len(df_modern)),
+        "n_species_modern": int(df_modern["species"].nunique()),
+        "n_records_historical": int(len(df_historical)),
+        "n_species_historical": int(df_historical["species"].nunique()),
+    }
+
+    # --- Build per-species EOO hulls from the historical frame ---
+    print(f"\n--- Building per-species EOO hulls (historical, {strategy}) ---")
+    species_groups = df_historical.groupby("species")
+    n_species = species_groups.ngroups
+    species_hulls: dict[str, Polygon] = {}
+    for i, (sp, grp) in enumerate(species_groups, start=1):
+        pts = grp[["decimalLongitude", "decimalLatitude"]].astype(float).values
+        hull = species_hull(pts)
+        species_hulls[sp] = hull
+        all_eoo_records.append({
+            "strategy": strategy,
+            "species": sp,
+            "n_points": int(len(pts)),
+            "hull_area_sqdeg": float(hull.area),
+            "wkt": hull.wkt,
+        })
+        if i % 50 == 0 or i == n_species:
+            print(f"  built hull {i:>4}/{n_species}  ({sp[:32]}, "
+                  f"area={hull.area:.2f} deg^2)")
+    strat_report["n_species_with_eoo"] = int(n_species)
+
+    # --- Per-Nside per-cell richness for this strategy ---
+    print(f"\n--- Cross-tabulating richness per Nside ({strategy}) ---")
+    # Write each Nside as a NetCDF group inside the per-strategy file.
+    if nc_path.exists():
+        nc_path.unlink()
+    strat_report["per_nside"] = {}
+    for nside in NSIDES:
+        iberian_pix_arr = IBERIA_PIX[nside]
+        iberian_set = set(int(p) for p in iberian_pix_arr)
+
+        mod = occurrences_to_richness(df_modern, nside)
+        mod = mod[mod["cell"].isin(iberian_set)].set_index("cell")
+
+        hist = historical_cell_counts(species_hulls, nside, iberian_set).set_index("cell")
+
+        df = pd.DataFrame({"cell": iberian_pix_arr}).set_index("cell")
+        df["richness_atlas"] = (
+            mod["richness"].reindex(df.index, fill_value=0).astype(np.int32)
+        )
+        df["richness_rangemap"] = (
+            hist["richness"].reindex(df.index, fill_value=0).astype(np.int32)
+        )
+        df["lon"] = IBERIA_LON[nside]
+        df["lat"] = IBERIA_LAT[nside]
+
+        n_cells = len(df)
+        mean_a = float(df["richness_atlas"].mean())
+        mean_r = float(df["richness_rangemap"].mean())
+        zz = int(((df["richness_atlas"] == 0) & (df["richness_rangemap"] == 0)).sum())
+        print(f"  nside={nside:>4}  "
+              f"n_cells={n_cells:>6,}  "
+              f"mean richness atlas={mean_a:5.2f}, rangemap={mean_r:5.2f}  "
+              f"zero-zero={zz:>5,}")
+        strat_report["per_nside"][nside] = {
+            "n_cells": int(n_cells),
+            "mean_richness_atlas": round(mean_a, 3),
+            "mean_richness_rangemap": round(mean_r, 3),
+            "zero_zero_cells": zz,
+        }
+
+        ds = xr.Dataset(
+            data_vars={
+                "richness_atlas": (
+                    ("cell",), df["richness_atlas"].values,
+                    {"long_name": "Per-cell species richness from modern "
+                                  "(year>=2000) GBIF occurrences (atlas-equivalent)",
+                     "units": "n_species",
+                     "strategy": strategy,
+                     "synthetic": str(SYNTHETIC[strategy])}),
+                "richness_rangemap": (
+                    ("cell",), df["richness_rangemap"].values,
+                    {"long_name": "Per-cell species richness from historical "
+                                  "(year<2000) EOO convex-hull coverage (range-map-equivalent)",
+                     "units": "n_species",
+                     "strategy": strategy,
+                     "synthetic": str(SYNTHETIC[strategy])}),
+            },
+            coords={
+                "cell": ("cell", df.index.values.astype(np.int64),
+                         {"long_name": f"HEALPix NESTED pixel index (nside={nside})"}),
+                "lon": ("cell", df["lon"].values,
+                        {"units": "degrees_east"}),
+                "lat": ("cell", df["lat"].values,
+                        {"units": "degrees_north"}),
+            },
+            attrs={
+                "nside": nside,
+                "depth": DEPTHS[nside],
+                "ellipsoid": ELLIPSOID,
+                "healpix_ordering": "NESTED",
+                "strategy": strategy,
+                "synthetic": str(SYNTHETIC[strategy]),
+                "year_split": YEAR_SPLIT,
+            },
+        )
+        ds.to_netcdf(
+            nc_path,
+            mode="a" if nc_path.exists() else "w",
+            group=f"nside_{nside}",
+            engine="netcdf4",
+            encoding={
+                "richness_atlas": {"zlib": True, "complevel": 4},
+                "richness_rangemap": {"zlib": True, "complevel": 4},
+            },
+        )
+
+    size_mb = nc_path.stat().st_size / 1e6
+    print(f"\n  saved {nc_path}  ({size_mb:.2f} MB)")
+    strat_report["richness_nc"] = str(nc_path.relative_to(ROOT))
+    strat_report["richness_nc_size_mb"] = round(size_mb, 2)
+    report["per_strategy"][strategy] = strat_report
 
 
 # %% [markdown]
-# ## Clean report
+# ## Persist per-strategy EOO polygons + clean report
+#
+# Single parquet covering both strategies, with a `strategy` column.
 
 # %%
+eoo_df = pd.DataFrame(all_eoo_records)
+eoo_df.to_parquet(EOO_PARQUET, index=False)
+print(f"\nsaved {EOO_PARQUET} "
+      f"({EOO_PARQUET.stat().st_size / 1e3:.1f} KB; "
+      f"{len(eoo_df)} species-rows across {eoo_df['strategy'].nunique()} strategies)")
+
 with open(CLEAN_REPORT, "w") as f:
     json.dump(report, f, indent=2, default=str)
 print(f"\n--- Clean report -> {CLEAN_REPORT}")

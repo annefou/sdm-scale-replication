@@ -1,23 +1,120 @@
 {
-  "synthetic_data": true,
   "hotspot_fraction": 0.05,
   "wilcoxon_p_threshold": 0.1,
-  "finest_nside": 512,
-  "finest_cell_size_km": 12.73,
-  "finest_misidentified_pct": 94.57,
-  "finest_overlap_pct_symmetric": 5.43,
-  "finest_overlap_pct_asymmetric_hjtable2": 10.3,
-  "coarsest_nside": 16,
-  "coarsest_cell_size_km": 407.48,
-  "coarsest_misidentified_pct": 0.0,
-  "dissolution_nside": 16,
-  "dissolution_cell_size_km": 407.4759035204424,
-  "n_nsides_indistinguishable": 1,
+  "strategies": {
+    "museum": {
+      "strategy": "museum",
+      "synthetic_data": false,
+      "finest_nside": 512,
+      "finest_cell_size_km": 12.73,
+      "finest_misidentified_pct": 93.66,
+      "finest_overlap_pct_symmetric": 6.34,
+      "finest_overlap_pct_asymmetric_hjtable2": 11.92,
+      "coarsest_nside": 16,
+      "coarsest_cell_size_km": 407.48,
+      "coarsest_misidentified_pct": 0.0,
+      "dissolution_nside": 16,
+      "dissolution_cell_size_km": 407.4759035204424,
+      "n_nsides_indistinguishable": 1,
+      "per_nside": {
+        "16": {
+          "cell_size_km": 407.48,
+          "misidentified_pct": 0.0,
+          "wilcoxon_p": 0.546875,
+          "indistinguishable_at_p10": true
+        },
+        "32": {
+          "cell_size_km": 203.74,
+          "misidentified_pct": 66.67,
+          "wilcoxon_p": 0.006963420068609971,
+          "indistinguishable_at_p10": false
+        },
+        "64": {
+          "cell_size_km": 101.87,
+          "misidentified_pct": 80.0,
+          "wilcoxon_p": 4.4138038439858064e-10,
+          "indistinguishable_at_p10": false
+        },
+        "128": {
+          "cell_size_km": 50.93,
+          "misidentified_pct": 85.71,
+          "wilcoxon_p": 8.818934924543199e-45,
+          "indistinguishable_at_p10": false
+        },
+        "256": {
+          "cell_size_km": 25.47,
+          "misidentified_pct": 89.94,
+          "wilcoxon_p": 4.225639175139169e-195,
+          "indistinguishable_at_p10": false
+        },
+        "512": {
+          "cell_size_km": 12.73,
+          "misidentified_pct": 93.66,
+          "wilcoxon_p": 0.0,
+          "indistinguishable_at_p10": false
+        }
+      }
+    },
+    "allbor": {
+      "strategy": "allbor",
+      "synthetic_data": true,
+      "finest_nside": 512,
+      "finest_cell_size_km": 12.73,
+      "finest_misidentified_pct": 95.32,
+      "finest_overlap_pct_symmetric": 4.68,
+      "finest_overlap_pct_asymmetric_hjtable2": 8.94,
+      "coarsest_nside": 16,
+      "coarsest_cell_size_km": 407.48,
+      "coarsest_misidentified_pct": 0.0,
+      "dissolution_nside": 16,
+      "dissolution_cell_size_km": 407.4759035204424,
+      "n_nsides_indistinguishable": 1,
+      "per_nside": {
+        "16": {
+          "cell_size_km": 407.48,
+          "misidentified_pct": 0.0,
+          "wilcoxon_p": 0.5,
+          "indistinguishable_at_p10": true
+        },
+        "32": {
+          "cell_size_km": 203.74,
+          "misidentified_pct": 100.0,
+          "wilcoxon_p": 0.048344460152425536,
+          "indistinguishable_at_p10": false
+        },
+        "64": {
+          "cell_size_km": 101.87,
+          "misidentified_pct": 80.0,
+          "wilcoxon_p": 2.0539271563773005e-16,
+          "indistinguishable_at_p10": false
+        },
+        "128": {
+          "cell_size_km": 50.93,
+          "misidentified_pct": 90.91,
+          "wilcoxon_p": 9.772416774832207e-76,
+          "indistinguishable_at_p10": false
+        },
+        "256": {
+          "cell_size_km": 25.47,
+          "misidentified_pct": 89.29,
+          "wilcoxon_p": 5.107772312081964e-297,
+          "indistinguishable_at_p10": false
+        },
+        "512": {
+          "cell_size_km": 12.73,
+          "misidentified_pct": 95.32,
+          "wilcoxon_p": 0.0,
+          "indistinguishable_at_p10": false
+        }
+      }
+    }
+  },
   "hj_2007_reference": {
     "australia_overlap_pct_at_0p25deg": 52.2,
     "australia_misidentified_pct_at_0p25deg": 47.8,
     "southafrica_overlap_pct_at_0p25deg": 31.4,
     "southafrica_misidentified_pct_at_0p25deg": 68.6,
-    "indistinguishable_at_or_above_deg": 4.0
+    "indistinguishable_at_or_above_deg": 4.0,
+    "note": "H&J 2007 used lat-lon grids at 0.25 deg ~= 25-28 km near the equator. Closest HEALPix-NESTED Nside is 256 (~25.5 km cell side)."
   }
 }
