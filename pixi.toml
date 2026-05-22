@@ -1,0 +1,69 @@
+# Single source of truth for the runtime — used by local dev, Docker, and CI.
+# Add every dependency a notebook imports here. Local "kitchen-sink" envs
+# (e.g. pangeo) hide missing deps; CI builds strictly from this file and will
+# silently produce empty notebook cells if anything is missing.
+#
+# pixi.lock (committed alongside this file) pins every package to an exact
+# build hash per platform. Regenerate it with `pixi install` after editing
+# this file; commit both files in the same commit.
+
+[workspace]
+name = "{{REPO_NAME}}"
+# bioconda hosts snakemake (and downstream rule-engine ecosystem); conda-forge
+# is the priority channel for everything else.
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+
+[dependencies]
+python = "3.12.*"
+# --- core scientific stack ---
+numpy = "*"
+pandas = ">=2.0"
+xarray = ">=2024.6"
+scipy = "*"
+matplotlib = "*"
+pyarrow = "*"
+# --- notebook execution + Jupyter Book ---
+jupytext = "*"
+jupyterlab = "*"
+nbclient = "*"
+ipykernel = "*"
+# --- pipeline driver ---
+snakemake = "*"
+# --- replace/extend with the deps your replication needs ---
+# Examples (uncomment as needed):
+# statsmodels = "*"          # GLM/GLMM regression
+# scikit-learn = "*"         # classical ML
+# pyproj = "*"               # CRS + map projections
+# cartopy = "*"              # geographic plotting
+# netcdf4 = "*"              # NetCDF I/O — preferred over .npz for arrays (see DOMAIN.md)
+# zarr = "*"                 # Zarr — preferred for arrays >2 GB or cloud-archived (see DOMAIN.md)
+# cdsapi = "*"               # Copernicus Climate Data Store
+# copernicusmarine = "*"     # Copernicus Marine Service
+# healpix-geo = "*"          # HEALPix on geo data — preferred (use nest=True — see DOMAIN.md)
+# healpy = "*"               # HEALPix on pure-sphere (astrophysics) only
+# rasterio = "*"             # raster I/O
+# geopandas = "*"            # vector I/O
+# dask = "*"                 # out-of-core / parallel
+
+# Pip-only deps go in [pypi-dependencies]. Conda-forge is preferred where available.
+# [pypi-dependencies]
+# pygbif = "*"               # GBIF occurrences
+# polytope-client = "*"      # Destination Earth Climate DT
+# earthkit-data = "*"
+
+[feature.docs.dependencies]
+mystmd = "*"
+
+[feature.tests.dependencies]
+pytest = "*"
+
+[environments]
+default = { solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+tests = { features = ["tests"], solve-group = "default" }
+
+[tasks]
+run = "snakemake --cores 1"
+book = "myst build --html"
+lab = "jupyter lab"
