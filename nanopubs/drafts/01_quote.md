@@ -28,15 +28,15 @@ Format: starts with `10.` — bare DOI, **NOT** `https://doi.org/...` form.
 
 ### Quoted Text (textarea, required)
 
-Verbatim from the paper PDF in `paper/`. Character-for-character. ≤ 500 chars in whole-text mode.
+Verbatim from the paper PDF in `paper/` (Abstract, page 13384). Character-for-character. ≤ 500 chars in whole-text mode.
 
 > _Read the PDF first. Don't paraphrase from memory. See `docs/verify-before-drafting.md`._
 
 ```
-
+At resolutions less than 2° (∼200 km), range maps overestimate the area of occupancy of individual species and mischaracterize spatial patterns of species richness, resulting in up to two-thirds of biodiversity hotspots being misidentified.
 ```
 
-Character count: ___ / 500.
+Character count: 240 / 500.
 
 ### Comment (textarea, required)
 
@@ -45,7 +45,7 @@ Subtitle: *"Our interpretation or explanation of why this quotation is relevant.
 Why this quote matters and what the replication tests. Connect the paper's claim to the work this repo does. Don't repeat the quote.
 
 ```
-
+Hurlbert & Jetz showed nearly two decades ago that the grain at which expert-drawn range maps are aggregated controls whether the resulting richness hotspots are real. Their test used WWF range maps overlaid on bird atlas survey data across Australia and southern Africa at 0.25°-8° lat-lon grids. The intervening 18 years have brought modern occurrence data (GBIF), updated IUCN range maps, and DGGS substrates (HEALPix-NESTED) that no longer carry the area-distortion of lat-lon grids. This replication closes the empirical loop on the eight SDM-resolution scaffold Quote-with-comments (Guisan 2007, Manzoor 2018, Araújo 2019, Brambilla 2024, Cohen & Jetz 2023, Zurell 2020, Moudrý 2023): does the scale-dependent hotspot misidentification re-emerge with modern data on an equal-area sphere-aware substrate, and at what HEALPix resolution does it onset?
 ```
 
 ## Publication note
