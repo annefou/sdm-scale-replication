@@ -30,6 +30,8 @@ references:
     authors:
       - family-names: "Hurlbert"
         given-names: "Allen H."
+      - family-names: "Jetz"
+        given-names: "Walter"
     year: "2007"
     doi: "10.1073/pnas.0704469104"
   # Apex of the prior FORRT constellation this replication speaks to:
