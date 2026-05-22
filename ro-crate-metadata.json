@@ -14,12 +14,12 @@
     {
       "@id": "./",
       "@type": ["Dataset", "ResearchObject"],
-      "name": "{{REPO_NAME}}",
-      "description": "{{REPO_DESCRIPTION}}",
-      "datePublished": "{{RELEASE_DATE}}",
+      "name": "sdm-scale-replication",
+      "description": "Reproduction and HEALPix-scale extension of Hurlbert & Jetz (2007) on the scale dependence of range-map species richness.",
+      "datePublished": "2026-05-22",
       "license": { "@id": "https://spdx.org/licenses/MIT" },
-      "publisher": { "@id": "{{AUTHOR_ORCID}}" },
-      "author": [{ "@id": "{{AUTHOR_ORCID}}" }],
+      "publisher": { "@id": "https://orcid.org/0000-0002-1784-2920" },
+      "author": [{ "@id": "https://orcid.org/0000-0002-1784-2920" }],
       "mainEntity": { "@id": "Snakefile" },
       "hasPart": [
         { "@id": "Snakefile" },
@@ -37,14 +37,14 @@
         { "@id": "nanopubs/PUBLISHED.md" }
       ],
       "citation": [
-        { "@id": "https://doi.org/{{PAPER_DOI}}" }
+        { "@id": "https://doi.org/10.1073/pnas.0704469104" }
       ]
     },
     {
-      "@id": "{{AUTHOR_ORCID}}",
+      "@id": "https://orcid.org/0000-0002-1784-2920",
       "@type": "Person",
-      "name": "{{AUTHOR_NAME}}",
-      "affiliation": "{{AUTHOR_AFFILIATION}}"
+      "name": "Anne Fouilloux",
+      "affiliation": "Lifewatch-ERIC, Spain"
     },
     {
       "@id": "Snakefile",
@@ -130,10 +130,10 @@
       "description": "URIs of the published Quote / AIDA / FORRT Claim / Replication Study / Replication Outcome / CiTO Citation steps."
     },
     {
-      "@id": "https://doi.org/{{PAPER_DOI}}",
+      "@id": "https://doi.org/10.1073/pnas.0704469104",
       "@type": "ScholarlyArticle",
-      "name": "{{PAPER_TITLE}}",
-      "datePublished": "{{PAPER_YEAR}}"
+      "name": "Species richness, hotspots, and the scale dependence of range maps in ecology and conservation",
+      "datePublished": "2007"
     }
   ]
 }

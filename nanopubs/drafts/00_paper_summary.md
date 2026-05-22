@@ -2,13 +2,13 @@
 
 > This is a working scratchpad for the paper-analysis phase. The output of this file feeds the Quote / AIDA / Claim drafts. It is not itself a nanopub.
 
-**Reference paper:** {{PAPER_TITLE}}
+**Reference paper:** Species richness, hotspots, and the scale dependence of range maps in ecology and conservation
 
-**DOI:** {{PAPER_DOI}}
+**DOI:** 10.1073/pnas.0704469104
 
 **Authors:** _add._
 
-**Year:** {{PAPER_YEAR}}
+**Year:** 2007
 
 ## Headline claim
 

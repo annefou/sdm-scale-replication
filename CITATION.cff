@@ -1,16 +1,16 @@
 cff-version: 1.2.0
-title: "{{REPO_NAME}}"
+title: "sdm-scale-replication"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
-  - family-names: "{{AUTHOR_FAMILY}}"
-    given-names: "{{AUTHOR_GIVEN}}"
-    orcid: "{{AUTHOR_ORCID}}"
-    affiliation: "{{AUTHOR_AFFILIATION}}"
-repository-code: "https://github.com/{{REPO_ORG}}/{{REPO_NAME}}"
+  - family-names: "Fouilloux"
+    given-names: "Anne"
+    orcid: "https://orcid.org/0000-0002-1784-2920"
+    affiliation: "Lifewatch-ERIC, Spain"
+repository-code: "https://github.com/annefou/sdm-scale-replication"
 license: MIT
 version: "0.1.0"
-date-released: "{{RELEASE_DATE}}"
+date-released: "2026-05-22"
 # After your first GitHub release the Zenodo integration mints a concept DOI.
 # Replace this once available (run /init-template again or edit by hand):
 doi: "{{ZENODO_DOI}}"
@@ -26,22 +26,48 @@ keywords:
   - Science-Live
 references:
   - type: article
-    title: "{{PAPER_TITLE}}"
+    title: "Species richness, hotspots, and the scale dependence of range maps in ecology and conservation"
     authors:
-      - family-names: "{{PAPER_AUTHOR_FAMILY}}"
-        given-names: "{{PAPER_AUTHOR_GIVEN}}"
-    year: "{{PAPER_YEAR}}"
-    doi: "{{PAPER_DOI}}"
-  # Prior FORRT chain this replication extends or qualifies. The URI below
-  # is the canonical persistent pointer to the prior constellation; the
-  # imported summary itself (CHAIN_SUMMARY.md, constellation.json, cached
-  # TriG) is regenerated on demand via `/import-from-nanopub <URL>` and
-  # lives in the gitignored `nanopubs/imported/` directory.
-  #
-  # If your replication does NOT extend a prior chain, init-template
-  # removes this entry. If it does, init-template substitutes the URI
-  # and description below from your responses.
+      - family-names: "Hurlbert"
+        given-names: "Allen H."
+    year: "2007"
+    doi: "10.1073/pnas.0704469104"
+  # Apex of the prior FORRT constellation this replication speaks to:
+  # the Iberian Bombus / Soroye 2020 chain (19 nanopubs ending in a
+  # Synthesis-level CiTO Citation). The Hurlbert & Jetz 2007 scale-dependence
+  # claim informs the resolution-sensitivity argument in that constellation;
+  # this replication closes the empirical loop on it.
+  # Re-run `/import-from-nanopub <URL>` to repopulate nanopubs/imported/.
   - type: generic
-    title: "{{PRIOR_CHAIN_DESCRIPTION}}"
-    url: "{{PRIOR_CHAIN_URI}}"
-    notes: "Apex CiTO Citation of the prior FORRT chain this replication extends. Re-run `/import-from-nanopub <URL>` to repopulate nanopubs/imported/ locally."
+    title: "Iberian Bombus FORRT constellation — Synthesis-level CiTO"
+    url: "https://w3id.org/sciencelive/np/RA1q6c0fG2bMbiozF8Az2UpIfzAzqp8hoVEl6QIzfUpH8"
+    notes: "Apex CiTO Citation of the 19-nanopub Bombus replication chain."
+
+  # The 8 Quote-with-comment nanopublications forming the Science Live
+  # SDM-resolution citation scaffold (published 2026-05-21). Each anchors
+  # one literature reference for the multi-resolution sensitivity argument
+  # that this replication closes empirically.
+  - type: generic
+    title: "Hurlbert & Jetz 2007 — scale dependence of range maps (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RADLy9WnL1eVbgvcKiJZRbVGM_Y-JNXcGE92I9EXYN1FY"
+  - type: generic
+    title: "Guisan et al. 2007 — grain-size sensitivity is region/species-dependent (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAlRI3Bxq9xAUnlV_lfT2Iv3Z036N5FIxwavTDr29y28c"
+  - type: generic
+    title: "Manzoor, Griffiths & Lukac 2018 — finer is not always better (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAj1q1c7PwlLlMEg8eXxUhzCwVv115poM12splJHzni6k"
+  - type: generic
+    title: "Araújo et al. 2019 — standards for SDM in biodiversity assessments (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAr-7vF_A4xvCLlPgiK2_4p3Rub3OXfln0utX9M-YpIw8"
+  - type: generic
+    title: "Brambilla, Bazzi & Ilahiane 2024 — fine-grain is needed for local abundance (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAYtSM4DzUfWg8_gDCSArKVYYkDLIYKHXG-OJYl6yJmac"
+  - type: generic
+    title: "Cohen & Jetz 2023 — coarse-grain misses important habitat at continental scale (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RATM-f21HFIMAaTCL6L7H-afOLheDS92M-xCmWy-V2d3o"
+  - type: generic
+    title: "Zurell et al. 2020 — ODMAP reporting protocol (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAL2U7ciZ7WSylwUgCaXta8ncU786nm0h2I_IZ1cyYdzA"
+  - type: generic
+    title: "Moudrý et al. 2023 — scale mismatches review (Quote-with-comment nanopub)"
+    url: "https://w3id.org/sciencelive/np/RAw1czC1bS0Fa2ZLaBdUPiqWaxbnQJQSrBzqGKsYNnpuw"
