@@ -8,7 +8,7 @@ This file is loaded by `CLAUDE.md` and overrides nothing in `CLAUDE.md` or `DOMA
 
 ```yaml
 name: "Anne Fouilloux"
-email: "anne.fouilloux@gmail.com"
+email: "anne.fouilloux@lifewatch.eu"
 orcid: "https://orcid.org/0000-0002-1784-2920"
 github_username: "annefou"
 affiliation: "Lifewatch-ERIC, Spain"
@@ -18,7 +18,7 @@ For git commits, configure the local repo (run once after cloning):
 
 ```bash
 git config user.name "Anne Fouilloux"
-git config user.email "anne.fouilloux@gmail.com"
+git config user.email "anne.fouilloux@lifewatch.eu"
 ```
 
 **Important — three layers must agree** for GitHub to credit your commits to your profile:
