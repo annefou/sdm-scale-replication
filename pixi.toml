@@ -30,27 +30,27 @@ nbclient = "*"
 ipykernel = "*"
 # --- pipeline driver ---
 snakemake = "*"
-# --- replace/extend with the deps your replication needs ---
-# Examples (uncomment as needed):
-# statsmodels = "*"          # GLM/GLMM regression
-# scikit-learn = "*"         # classical ML
-# pyproj = "*"               # CRS + map projections
-# cartopy = "*"              # geographic plotting
-# netcdf4 = "*"              # NetCDF I/O — preferred over .npz for arrays (see DOMAIN.md)
-# zarr = "*"                 # Zarr — preferred for arrays >2 GB or cloud-archived (see DOMAIN.md)
-# cdsapi = "*"               # Copernicus Climate Data Store
-# copernicusmarine = "*"     # Copernicus Marine Service
-# healpix-geo = "*"          # HEALPix on geo data — preferred (use nest=True — see DOMAIN.md)
-# healpy = "*"               # HEALPix on pure-sphere (astrophysics) only
-# rasterio = "*"             # raster I/O
-# geopandas = "*"            # vector I/O
-# dask = "*"                 # out-of-core / parallel
+# --- intermediate storage formats (NEVER .npz — DOMAIN.md) ---
+netcdf4 = "*"
+zarr = "*"
+dask = "*"
+# --- geographic I/O for IUCN/BirdLife range polygons ---
+geopandas = "*"
+shapely = "*"
+pyproj = "*"
+rasterio = "*"
+fiona = "*"
+# --- map plotting ---
+cartopy = "*"
+# --- HTTP for direct downloads ---
+requests = "*"
 
-# Pip-only deps go in [pypi-dependencies]. Conda-forge is preferred where available.
-# [pypi-dependencies]
-# pygbif = "*"               # GBIF occurrences
-# polytope-client = "*"      # Destination Earth Climate DT
-# earthkit-data = "*"
+[pypi-dependencies]
+pygbif = "*"
+# HEALPix on geographic data (NESTED, WGS84-aware) — DOMAIN.md mandate.
+# Published on PyPI from github.com/GRID4EARTH/healpix-geo (Rust + maturin).
+# Pinned >=0.1.2 — the CalVer 2026.5.1 release was yanked (wrong version scheme).
+healpix-geo = ">=0.1.2"
 
 [feature.docs.dependencies]
 mystmd = "*"

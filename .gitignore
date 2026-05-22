@@ -54,6 +54,8 @@ reference/
 
 # Results — large numerical outputs (commit only summary CSVs you reference in figures)
 results/raw/
+# Notebook execution logs — regenerated each run, not durable provenance
+results/logs/
 
 # Docker
 docker-image.tar.gz

@@ -1,13 +1,19 @@
-# Snakefile — orchestrates the replication pipeline end-to-end.
+# Snakefile — orchestrates the H&J 2007 scale-replication pipeline.
 #
-# Replace the placeholder rules with your actual replication steps. The
-# canonical pattern is one rule per pipeline stage, and each rule wraps a
-# notebook executed via jupytext (so the notebook stays the source of truth
-# and the Snakefile just sequences them).
+# Four notebooks, four rules:
+#
+#   01_data_download  -> data/gbif/{modern,historical}.zip + data/raw/sources.json
+#   02_data_clean     -> data/clean/richness_per_nside.nc + species_eoo_polygons.parquet
+#   03_analysis       -> results/scale_dependence.parquet + hotspot_cells.parquet + headline.json
+#   04_figures        -> figures/main_result.png + iberia_hotspots_nside128.png
 #
 # Usage:
-#   snakemake --cores 1                  # run everything
-#   snakemake --cores 1 -n               # dry run
+#   pixi run snakemake --cores 1           # run everything
+#   pixi run snakemake --cores 1 -n        # dry run
+#   pixi run snakemake --cores 1 download  # only fetch GBIF zips
+#   pixi run snakemake --cores 1 clean     # 01 + 02
+#   pixi run snakemake --cores 1 analysis  # 01 + 02 + 03
+#   pixi run snakemake --cores 1 figures   # 01 + 02 + 03 + 04
 
 NOTEBOOKS = "notebooks"
 DATA = "data"
@@ -17,48 +23,91 @@ FIGURES = "figures"
 
 rule all:
     input:
-        # Replace with your actual final artefacts:
         f"{FIGURES}/main_result.png",
-        f"{RESULTS}/summary.csv",
+        f"{FIGURES}/iberia_hotspots_nside128.png",
+        f"{RESULTS}/scale_dependence.parquet",
+        f"{RESULTS}/headline.json",
 
 
 # ---------- 01: Data download ----------
-# Every replication MUST be self-contained: data is downloaded by the notebook,
-# never assumed to exist locally. See CLAUDE.md § Self-contained data.
-rule data_download:
+# Self-contained: fetches modern (post-2000) and historical (pre-2000)
+# GBIF Iberian-bird occurrence zips. Three modes (see notebook):
+#   1. Pre-minted GBIF keys hardcoded in the notebook -> fetch zip by URL.
+#   2. GBIF_USER/GBIF_PWD/GBIF_EMAIL env vars -> mint a fresh download.
+#   3. Synthetic demo fallback -> deterministic Iberian bird data.
+# The source registry at data/raw/sources.json is always written and
+# is the rule's declared output.
+rule download:
     output:
-        f"{DATA}/raw/dataset.zip",
+        f"{DATA}/raw/sources.json",
+        f"{DATA}/gbif/birds_iberia_modern.zip",
+        f"{DATA}/gbif/birds_iberia_historical.zip",
     log:
         f"{RESULTS}/logs/01_data_download.log",
     shell:
-        f"cd {{NOTEBOOKS}} && jupytext --to notebook --execute 01_data_download.py 2>&1 | tee ../{{log}}"
+        "mkdir -p $(dirname {log}) && "
+        "cd " + NOTEBOOKS + " && "
+        "jupytext --to notebook 01_data_download.py && "
+        "jupyter execute --inplace 01_data_download.ipynb 2>&1 | tee ../{log}"
 
 
 # ---------- 02: Data clean ----------
-rule data_clean:
+# Bins both GBIF datasets onto HEALPix-NESTED at Nside in
+# {16, 32, 64, 128, 256, 512}. Modern -> per-cell richness from points.
+# Historical -> per-species convex-hull EOO -> per-cell richness from
+# polygons. Persists one NetCDF file with one group per Nside.
+rule clean:
     input:
-        f"{DATA}/raw/dataset.zip",
+        f"{DATA}/gbif/birds_iberia_modern.zip",
+        f"{DATA}/gbif/birds_iberia_historical.zip",
     output:
-        f"{DATA}/clean/dataset.parquet",
+        richness = f"{DATA}/clean/richness_per_nside.nc",
+        eoo = f"{DATA}/clean/species_eoo_polygons.parquet",
+        report = f"{DATA}/clean/clean_report.json",
+    log:
+        f"{RESULTS}/logs/02_data_clean.log",
     shell:
-        f"cd {{NOTEBOOKS}} && jupytext --to notebook --execute 02_data_clean.py"
+        "mkdir -p $(dirname {log}) {DATA}/clean && "
+        "cd " + NOTEBOOKS + " && "
+        "jupytext --to notebook 02_data_clean.py && "
+        "jupyter execute --inplace 02_data_clean.ipynb 2>&1 | tee ../{log}"
 
 
 # ---------- 03: Analysis ----------
+# Per Nside: top-5% hotspot set overlap (H&J Table 2) + Wilcoxon signed-
+# rank test on per-cell richness (H&J's >=4° indistinguishability check).
 rule analysis:
     input:
-        f"{DATA}/clean/dataset.parquet",
+        f"{DATA}/clean/richness_per_nside.nc",
     output:
-        f"{RESULTS}/summary.csv",
+        scale = f"{RESULTS}/scale_dependence.parquet",
+        hotspots = f"{RESULTS}/hotspot_cells.parquet",
+        headline = f"{RESULTS}/headline.json",
+    log:
+        f"{RESULTS}/logs/03_analysis.log",
     shell:
-        f"cd {{NOTEBOOKS}} && jupytext --to notebook --execute 03_analysis.py"
+        "mkdir -p $(dirname {log}) " + RESULTS + " && "
+        "cd " + NOTEBOOKS + " && "
+        "jupytext --to notebook 03_analysis.py && "
+        "jupyter execute --inplace 03_analysis.ipynb 2>&1 | tee ../{log}"
 
 
 # ---------- 04: Figures ----------
+# Two figures: scale-dependence main_result.png + Iberia hotspot map.
 rule figures:
     input:
-        f"{RESULTS}/summary.csv",
+        scale = f"{RESULTS}/scale_dependence.parquet",
+        hotspots = f"{RESULTS}/hotspot_cells.parquet",
+        richness = f"{DATA}/clean/richness_per_nside.nc",
     output:
-        f"{FIGURES}/main_result.png",
+        main_png = f"{FIGURES}/main_result.png",
+        main_pdf = f"{FIGURES}/main_result.pdf",
+        map_png = f"{FIGURES}/iberia_hotspots_nside128.png",
+        map_pdf = f"{FIGURES}/iberia_hotspots_nside128.pdf",
+    log:
+        f"{RESULTS}/logs/04_figures.log",
     shell:
-        f"cd {{NOTEBOOKS}} && jupytext --to notebook --execute 04_figures.py"
+        "mkdir -p $(dirname {log}) " + FIGURES + " && "
+        "cd " + NOTEBOOKS + " && "
+        "jupytext --to notebook 04_figures.py && "
+        "jupyter execute --inplace 04_figures.ipynb 2>&1 | tee ../{log}"

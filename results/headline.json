@@ -1,0 +1,23 @@
+{
+  "synthetic_data": true,
+  "hotspot_fraction": 0.05,
+  "wilcoxon_p_threshold": 0.1,
+  "finest_nside": 512,
+  "finest_cell_size_km": 12.73,
+  "finest_misidentified_pct": 94.57,
+  "finest_overlap_pct_symmetric": 5.43,
+  "finest_overlap_pct_asymmetric_hjtable2": 10.3,
+  "coarsest_nside": 16,
+  "coarsest_cell_size_km": 407.48,
+  "coarsest_misidentified_pct": 0.0,
+  "dissolution_nside": 16,
+  "dissolution_cell_size_km": 407.4759035204424,
+  "n_nsides_indistinguishable": 1,
+  "hj_2007_reference": {
+    "australia_overlap_pct_at_0p25deg": 52.2,
+    "australia_misidentified_pct_at_0p25deg": 47.8,
+    "southafrica_overlap_pct_at_0p25deg": 31.4,
+    "southafrica_misidentified_pct_at_0p25deg": 68.6,
+    "indistinguishable_at_or_above_deg": 4.0
+  }
+}
