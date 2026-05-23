@@ -23,7 +23,16 @@ jobs:
       - name: Skip if template has not been initialised
         id: guard
         run: |
-          placeholder_files=$(grep -rln '{{[A-Z_]\+}}' . --include='*.md' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.cff' --include='*.py' --include='*.toml' 2>/dev/null | grep -v 'claude/skills/init-template/' || true)
+          # {{ZENODO_DOI}} is documented to remain unsubstituted until the first
+          # GitHub release mints the concept DOI — so don't treat it as a blocker.
+          # See docs/fair4rs-checklist.md.
+          placeholder_files=$(grep -rln '{{[A-Z_]\+}}' . --include='*.md' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.cff' --include='*.py' --include='*.toml' 2>/dev/null \
+            | grep -v 'claude/skills/init-template/' \
+            | while read f; do
+                if grep -oE '\{\{[A-Z_]+\}\}' "$f" | grep -v '{{ZENODO_DOI}}' | head -1 > /dev/null; then
+                  echo "$f"
+                fi
+              done)
           if [ -n "$placeholder_files" ]; then
             echo "::notice::Template placeholders detected ({{...}} tokens). Run /init-template before releasing. Skipping Docker build."
             echo "skip=true" >> "$GITHUB_OUTPUT"
