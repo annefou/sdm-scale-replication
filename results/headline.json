@@ -57,52 +57,52 @@
     },
     "allbor": {
       "strategy": "allbor",
-      "synthetic_data": true,
+      "synthetic_data": false,
       "finest_nside": 512,
       "finest_cell_size_km": 12.73,
-      "finest_misidentified_pct": 95.32,
-      "finest_overlap_pct_symmetric": 4.68,
-      "finest_overlap_pct_asymmetric_hjtable2": 8.94,
+      "finest_misidentified_pct": 94.72,
+      "finest_overlap_pct_symmetric": 5.28,
+      "finest_overlap_pct_asymmetric_hjtable2": 10.03,
       "coarsest_nside": 16,
       "coarsest_cell_size_km": 407.48,
-      "coarsest_misidentified_pct": 0.0,
-      "dissolution_nside": 16,
-      "dissolution_cell_size_km": 407.4759035204424,
-      "n_nsides_indistinguishable": 1,
+      "coarsest_misidentified_pct": 100.0,
+      "dissolution_nside": null,
+      "dissolution_cell_size_km": null,
+      "n_nsides_indistinguishable": 0,
       "per_nside": {
         "16": {
           "cell_size_km": 407.48,
-          "misidentified_pct": 0.0,
-          "wilcoxon_p": 0.5,
-          "indistinguishable_at_p10": true
+          "misidentified_pct": 100.0,
+          "wilcoxon_p": 0.0078125,
+          "indistinguishable_at_p10": false
         },
         "32": {
           "cell_size_km": 203.74,
-          "misidentified_pct": 100.0,
-          "wilcoxon_p": 0.048344460152425536,
+          "misidentified_pct": 66.67,
+          "wilcoxon_p": 0.010752303932953407,
           "indistinguishable_at_p10": false
         },
         "64": {
           "cell_size_km": 101.87,
-          "misidentified_pct": 80.0,
-          "wilcoxon_p": 2.0539271563773005e-16,
+          "misidentified_pct": 100.0,
+          "wilcoxon_p": 0.0008731733858692733,
           "indistinguishable_at_p10": false
         },
         "128": {
           "cell_size_km": 50.93,
-          "misidentified_pct": 90.91,
-          "wilcoxon_p": 9.772416774832207e-76,
+          "misidentified_pct": 97.87,
+          "wilcoxon_p": 9.221313303559213e-46,
           "indistinguishable_at_p10": false
         },
         "256": {
           "cell_size_km": 25.47,
-          "misidentified_pct": 89.29,
-          "wilcoxon_p": 5.107772312081964e-297,
+          "misidentified_pct": 97.8,
+          "wilcoxon_p": 6.047696675500167e-224,
           "indistinguishable_at_p10": false
         },
         "512": {
           "cell_size_km": 12.73,
-          "misidentified_pct": 95.32,
+          "misidentified_pct": 94.72,
           "wilcoxon_p": 0.0,
           "indistinguishable_at_p10": false
         }

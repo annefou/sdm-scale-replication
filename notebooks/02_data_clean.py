@@ -57,6 +57,7 @@
 # %%
 import json
 import zipfile
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
@@ -170,15 +171,27 @@ report["n_cells_per_nside"] = {n: int(len(IBERIA_PIX[n])) for n in NSIDES}
 
 
 # %% [markdown]
-# ## GBIF zip loader
+# ## GBIF zip streaming reader
 #
-# Reads the SIMPLE_CSV inside a GBIF download zip (tab-separated despite
-# the name). Filters to the Iberia bbox and drops rows with missing
-# essentials. Returns one DataFrame for the strategy.
+# Streams the SIMPLE_CSV inside a GBIF download zip (tab-separated
+# despite the name) in chunks of 1 M rows. Each yielded chunk is already
+# NA-dropped on the essentials (species, lat, lon, year) and filtered to
+# the Iberia bbox, so downstream consumers can fold chunks into per-cell
+# and per-species accumulators without ever materialising the whole
+# dataset in memory.
+#
+# Streaming matters because the all-BoR allbor download is ~50–65 M
+# rows (~6.5 GB compressed, ~25–30 GB uncompressed TSV). A one-shot
+# `pd.read_csv` peaks at >10 GB resident and has been observed to crash
+# the kernel on 16 GB laptops (see `memory/pipeline_clean_oom_risk.md`).
 
 # %%
-def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
-    """Extract and read the SIMPLE_CSV inside a GBIF download zip."""
+GBIF_CHUNKSIZE = 1_000_000
+
+
+def iter_gbif_chunks(zip_path: Path,
+                     chunksize: int = GBIF_CHUNKSIZE) -> Iterator[pd.DataFrame]:
+    """Yield NA-dropped, bbox-filtered chunks of a GBIF SIMPLE_CSV zip."""
     if not zip_path.exists():
         raise FileNotFoundError(
             f"Expected GBIF zip at {zip_path} — re-run "
@@ -190,7 +203,7 @@ def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
             raise RuntimeError(f"No CSV inside {zip_path}")
         member = candidates[0]
         with zf.open(member) as src:
-            df = pd.read_csv(
+            reader = pd.read_csv(
                 src, sep="\t",
                 usecols=lambda c: c in {
                     "gbifID", "species", "decimalLatitude",
@@ -199,53 +212,41 @@ def load_gbif_csv(zip_path: Path) -> pd.DataFrame:
                 },
                 dtype={"gbifID": "Int64", "year": "Int64",
                        "countryCode": "string"},
-                low_memory=False, on_bad_lines="skip",
+                chunksize=chunksize, on_bad_lines="skip",
             )
-    # Drop rows missing the essentials (species, lat, lon, year — we need
-    # year for the modern/historical split).
-    df = df.dropna(
-        subset=["species", "decimalLatitude", "decimalLongitude", "year"]
-    ).copy()
-    lon = df["decimalLongitude"].astype(float)
-    lat = df["decimalLatitude"].astype(float)
-    in_bbox = (
-        (lon >= IBERIA_LON_MIN) & (lon <= IBERIA_LON_MAX)
-        & (lat >= IBERIA_LAT_MIN) & (lat <= IBERIA_LAT_MAX)
-    )
-    df = df.loc[in_bbox].reset_index(drop=True)
-    return df
+            for raw in reader:
+                df = raw.dropna(
+                    subset=["species", "decimalLatitude",
+                            "decimalLongitude", "year"]
+                )
+                if df.empty:
+                    continue
+                lon = df["decimalLongitude"].astype(float)
+                lat = df["decimalLatitude"].astype(float)
+                in_bbox = (
+                    (lon >= IBERIA_LON_MIN) & (lon <= IBERIA_LON_MAX)
+                    & (lat >= IBERIA_LAT_MIN) & (lat <= IBERIA_LAT_MAX)
+                )
+                df = df.loc[in_bbox]
+                if df.empty:
+                    continue
+                yield df.reset_index(drop=True)
 
 
 # %% [markdown]
 # ## Per-strategy helpers
 #
-# - `occurrences_to_richness` — per Nside, count distinct species per
-#   HEALPix-NESTED cell. Used for the modern (atlas) frame.
 # - `species_hull` — convex hull of a (lon, lat) point array with
 #   pragmatic fallbacks for n < 3.
 # - `hull_to_cells` — `healpix_geo.nested.polygon_coverage` of the hull.
 # - `historical_cell_counts` — per Nside, per-cell count of species
 #   whose EOO hull covers the cell, restricted to the Iberian cell set.
+#
+# Modern (atlas) per-cell richness is computed inline in the per-strategy
+# streaming loop below, by folding chunked `(cell, species_id)` pairs into
+# per-Nside numpy arrays and then deduplicating once at the end.
 
 # %%
-def occurrences_to_richness(df: pd.DataFrame, nside: int) -> pd.DataFrame:
-    """Per-cell unique-species count at one Nside."""
-    depth = DEPTHS[nside]
-    cells = hp_nested.lonlat_to_healpix(
-        df["decimalLongitude"].astype(float).values,
-        df["decimalLatitude"].astype(float).values,
-        depth, ELLIPSOID,
-    ).astype(np.int64)
-    species = df["species"].values
-    sub = pd.DataFrame({"cell": cells, "species": species})
-    return (
-        sub.drop_duplicates(["cell", "species"])
-           .groupby("cell", as_index=False)
-           .size()
-           .rename(columns={"size": "richness"})
-    )
-
-
 def species_hull(points: np.ndarray) -> Polygon:
     """Convex hull of a (lon, lat) point array with n<3 fallbacks."""
     if len(points) >= 3:
@@ -297,10 +298,21 @@ def historical_cell_counts(species_hulls: dict[str, Polygon],
 
 
 # %% [markdown]
-# ## Process each strategy
+# ## Process each strategy (streaming)
 #
-# Load the zip -> split by year -> per-Nside per-cell richness arrays
-# (atlas + rangemap) -> persist as one NetCDF per strategy.
+# Stream the zip in 1 M-row chunks. Per chunk:
+#
+# - Split on `YEAR_SPLIT` into modern / historical sub-chunks.
+# - For modern: for each Nside, compute the `(cell, species_id)` pairs
+#   and accumulate per-chunk-unique pair arrays into per-Nside lists.
+#   Final per-cell atlas richness = `|distinct species per cell|` after
+#   a single end-of-stream `np.unique` across all chunks.
+# - For historical: accumulate per-species (lon, lat) point arrays into
+#   a dict, then build convex hulls once after the stream completes.
+#
+# This keeps peak memory bounded by `|unique (cell, species) pairs|`
+# (atlas) + `|historical records|` (range-map), rather than by the full
+# row count of the zip.
 
 # %%
 all_eoo_records: list[dict] = []
@@ -312,35 +324,106 @@ for strategy in STRATEGIES:
     zip_path = STRATEGY_ZIPS[strategy]
     nc_path = STRATEGY_RICHNESS_NC[strategy]
 
-    df_all = load_gbif_csv(zip_path)
-    df_modern = df_all[df_all["year"].astype(int) >= YEAR_SPLIT].copy()
-    df_historical = df_all[df_all["year"].astype(int) < YEAR_SPLIT].copy()
-    print(f"  loaded     : {len(df_all):>10,} records, "
-          f"{df_all['species'].nunique()} species "
-          f"(years {int(df_all['year'].min()) if len(df_all) else 'NA'}"
-          f"..{int(df_all['year'].max()) if len(df_all) else 'NA'})")
-    print(f"  modern     : {len(df_modern):>10,} records, "
-          f"{df_modern['species'].nunique()} species  (>= {YEAR_SPLIT})")
-    print(f"  historical : {len(df_historical):>10,} records, "
-          f"{df_historical['species'].nunique()} species  (< {YEAR_SPLIT})")
+    # Per-strategy species → small int ID, so modern pair arrays can stay
+    # as int64×int64 instead of carrying string objects.
+    species_to_id: dict[str, int] = {}
+
+    def _sid(sp: str) -> int:
+        sid = species_to_id.get(sp)
+        if sid is None:
+            sid = len(species_to_id)
+            species_to_id[sp] = sid
+        return sid
+
+    # Modern accumulator: per Nside, list of per-chunk-unique (cell, sid)
+    # int64 pair arrays. Final dedup + per-cell count happens once below.
+    modern_pairs: dict[int, list[np.ndarray]] = {n: [] for n in NSIDES}
+    # Historical accumulator: per species, list of (lon, lat) point arrays.
+    hist_pts: dict[str, list[np.ndarray]] = {}
+
+    n_records_total = 0
+    n_records_modern = 0
+    n_records_historical = 0
+    species_total: set[str] = set()
+    species_modern: set[str] = set()
+    species_historical: set[str] = set()
+    year_min: int | None = None
+    year_max: int | None = None
+
+    for ci, chunk in enumerate(iter_gbif_chunks(zip_path), start=1):
+        n_records_total += len(chunk)
+        years = chunk["year"].astype(int).values
+        cmin, cmax = int(years.min()), int(years.max())
+        year_min = cmin if year_min is None else min(year_min, cmin)
+        year_max = cmax if year_max is None else max(year_max, cmax)
+        species_total.update(chunk["species"].unique().tolist())
+
+        is_modern = years >= YEAR_SPLIT
+        modern_chunk = chunk.loc[is_modern]
+        hist_chunk = chunk.loc[~is_modern]
+        n_records_modern += len(modern_chunk)
+        n_records_historical += len(hist_chunk)
+
+        if len(modern_chunk):
+            species_modern.update(modern_chunk["species"].unique().tolist())
+            mod_lon = modern_chunk["decimalLongitude"].astype(float).values
+            mod_lat = modern_chunk["decimalLatitude"].astype(float).values
+            mod_sp = modern_chunk["species"].values
+            mod_sid = np.fromiter(
+                (_sid(s) for s in mod_sp),
+                dtype=np.int64, count=len(mod_sp),
+            )
+            for nside in NSIDES:
+                cells = hp_nested.lonlat_to_healpix(
+                    mod_lon, mod_lat, DEPTHS[nside], ELLIPSOID,
+                ).astype(np.int64)
+                pairs = np.column_stack([cells, mod_sid])
+                pairs = np.unique(pairs, axis=0)
+                modern_pairs[nside].append(pairs)
+
+        if len(hist_chunk):
+            species_historical.update(hist_chunk["species"].unique().tolist())
+            for sp, grp in hist_chunk.groupby("species", sort=False):
+                pts = (
+                    grp[["decimalLongitude", "decimalLatitude"]]
+                    .astype(float)
+                    .values
+                )
+                hist_pts.setdefault(sp, []).append(pts)
+
+        print(f"  chunk {ci:>3}: +{len(chunk):>8,} rows  "
+              f"(modern +{len(modern_chunk):>8,}, "
+              f"hist +{len(hist_chunk):>7,})  "
+              f"running total: {n_records_total:>11,}")
+
+    print(f"\n  loaded     : {n_records_total:>10,} records, "
+          f"{len(species_total)} species  "
+          f"(years {year_min}..{year_max})")
+    print(f"  modern     : {n_records_modern:>10,} records, "
+          f"{len(species_modern)} species  (>= {YEAR_SPLIT})")
+    print(f"  historical : {n_records_historical:>10,} records, "
+          f"{len(species_historical)} species  (< {YEAR_SPLIT})")
 
     strat_report: dict = {
         "synthetic": SYNTHETIC[strategy],
-        "n_records_total": int(len(df_all)),
-        "n_species_total": int(df_all["species"].nunique()),
-        "n_records_modern": int(len(df_modern)),
-        "n_species_modern": int(df_modern["species"].nunique()),
-        "n_records_historical": int(len(df_historical)),
-        "n_species_historical": int(df_historical["species"].nunique()),
+        "n_records_total": int(n_records_total),
+        "n_species_total": int(len(species_total)),
+        "n_records_modern": int(n_records_modern),
+        "n_species_modern": int(len(species_modern)),
+        "n_records_historical": int(n_records_historical),
+        "n_species_historical": int(len(species_historical)),
+        "year_min": int(year_min) if year_min is not None else None,
+        "year_max": int(year_max) if year_max is not None else None,
     }
 
-    # --- Build per-species EOO hulls from the historical frame ---
+    # --- Build per-species EOO hulls from accumulated historical points ---
     print(f"\n--- Building per-species EOO hulls (historical, {strategy}) ---")
-    species_groups = df_historical.groupby("species")
-    n_species = species_groups.ngroups
     species_hulls: dict[str, Polygon] = {}
-    for i, (sp, grp) in enumerate(species_groups, start=1):
-        pts = grp[["decimalLongitude", "decimalLatitude"]].astype(float).values
+    n_species_eoo = len(hist_pts)
+    sorted_species = sorted(hist_pts.keys())
+    for i, sp in enumerate(sorted_species, start=1):
+        parts = hist_pts.pop(sp)
+        pts = np.vstack(parts) if len(parts) > 1 else parts[0]
         hull = species_hull(pts)
         species_hulls[sp] = hull
         all_eoo_records.append({
@@ -350,10 +433,10 @@ for strategy in STRATEGIES:
             "hull_area_sqdeg": float(hull.area),
             "wkt": hull.wkt,
         })
-        if i % 50 == 0 or i == n_species:
-            print(f"  built hull {i:>4}/{n_species}  ({sp[:32]}, "
+        if i % 50 == 0 or i == n_species_eoo:
+            print(f"  built hull {i:>4}/{n_species_eoo}  ({sp[:32]}, "
                   f"area={hull.area:.2f} deg^2)")
-    strat_report["n_species_with_eoo"] = int(n_species)
+    strat_report["n_species_with_eoo"] = int(n_species_eoo)
 
     # --- Per-Nside per-cell richness for this strategy ---
     print(f"\n--- Cross-tabulating richness per Nside ({strategy}) ---")
@@ -365,8 +448,24 @@ for strategy in STRATEGIES:
         iberian_pix_arr = IBERIA_PIX[nside]
         iberian_set = set(int(p) for p in iberian_pix_arr)
 
-        mod = occurrences_to_richness(df_modern, nside)
-        mod = mod[mod["cell"].isin(iberian_set)].set_index("cell")
+        # Atlas: dedup across chunks, restrict to Iberian cells, then count
+        # distinct species per cell.
+        parts = modern_pairs[nside]
+        if parts:
+            all_pairs = np.vstack(parts) if len(parts) > 1 else parts[0]
+            all_pairs = np.unique(all_pairs, axis=0)
+            mask = np.isin(all_pairs[:, 0], iberian_pix_arr)
+            kept_cells = all_pairs[mask, 0]
+            uniq_cells, counts = np.unique(kept_cells, return_counts=True)
+            mod = pd.DataFrame(
+                {"cell": uniq_cells, "richness": counts}
+            ).astype({"cell": np.int64, "richness": np.int64}).set_index("cell")
+        else:
+            mod = pd.DataFrame(
+                {"cell": [], "richness": []}, dtype=np.int64,
+            ).set_index("cell")
+        # Free per-Nside pair memory now that we've reduced it.
+        modern_pairs[nside] = []
 
         hist = historical_cell_counts(species_hulls, nside, iberian_set).set_index("cell")
 

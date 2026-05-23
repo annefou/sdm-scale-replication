@@ -178,7 +178,8 @@ ax.set_title(
     + ("  —  contains SYNTHETIC DEMO DATA" if any_synth else ""),
     fontsize=11,
 )
-ax.legend(loc="upper right", fontsize=8, framealpha=0.92)
+ax.legend(loc="lower right", fontsize=8, framealpha=0.92,
+          borderaxespad=0.6)
 
 # Per-strategy synthetic banner — translucent text in the plot area, one
 # line per synthetic strategy, so the figure honestly tells the reader
