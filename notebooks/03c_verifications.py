@@ -611,7 +611,7 @@ print(test5_df.to_string(index=False))
 
 # %%
 # --- Figure 1: land mask sensitivity ---
-fig1, ax = plt.subplots(figsize=(10, 5))
+fig1, ax = plt.subplots(figsize=(10, 5.5))
 width = 0.35
 xs = np.arange(len(NSIDES))
 for i, s in enumerate(STRATEGIES):
@@ -633,7 +633,10 @@ ax.set_xlabel("HEALPix Nside")
 ax.set_ylabel("Hotspot misidentification (%)")
 ax.set_title("Test 1 — Land mask sensitivity\n"
              "all Iberian-bbox cells (solid) vs peninsula-only (hatched)")
-ax.legend(loc="lower right", fontsize=8, ncol=2)
+# Place legend below the plot — no internal quadrant is bar-free
+# (allbor is at 100% on the left, all bars 90%+ on the right).
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12),
+          fontsize=8, ncol=4, framealpha=0.92)
 ax.set_ylim(0, 105)
 fig1.tight_layout()
 land_fig = FIGURES_DIR / "verif_land_mask.png"
