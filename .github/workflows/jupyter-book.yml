@@ -73,11 +73,19 @@ jobs:
             pixi run jupytext --to notebook "$nb"
           done
 
-      # Glob, not a hard-coded list — new notebooks are picked up automatically.
+      # Execute only canonical pipeline notebooks (01–04 in myst.yml TOC).
+      # The pattern `[0-9][0-9]_*` matches `01_`, `02_`, `03_`, `04_` etc.
+      # but NOT letter-suffixed diagnostic / exploratory notebooks like
+      # `03b_diagnostics`, `03c_verifications`, `03d_art12_comparison`.
+      # Those may depend on external data not available in CI (e.g. the
+      # 203 MB Art-12 GPKG for 03d) and are not part of the published
+      # reproduction. New canonical notebooks added with a bare-number
+      # prefix are picked up automatically.
       - name: Execute notebooks
         if: steps.guard.outputs.skip != 'true'
         run: |
-          for nb in notebooks/*.ipynb; do
+          shopt -s nullglob
+          for nb in notebooks/[0-9][0-9]_*.ipynb; do
             echo "::group::Executing $nb"
             pixi run jupyter execute --inplace "$nb"
             echo "::endgroup::"
