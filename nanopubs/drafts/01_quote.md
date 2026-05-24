@@ -45,7 +45,7 @@ Subtitle: *"Our interpretation or explanation of why this quotation is relevant.
 Why this quote matters and what the replication tests. Connect the paper's claim to the work this repo does. Don't repeat the quote.
 
 ```
-Hurlbert & Jetz showed that the grain at which expert-drawn bird range maps are aggregated controls whether the resulting richness hotspots are real: finer than ~2°, up to two-thirds are misidentified relative to atlas-survey ground truth. This replication tests whether that scale-dependence re-emerges for Iberian birds using modern GBIF occurrence data on an equal-area HEALPix-NESTED substrate — which removes the cell-area distortion of lat-lon grids — and what drives the magnitude of the range-map/atlas hotspot disagreement.
+Hurlbert & Jetz showed that the spatial grain used to aggregate expert-drawn bird range maps affects whether richness hotspots are real: at resolutions finer than ~2°, up to two-thirds are misidentified relative to atlas-survey ground truth. We propose testing whether the same scale dependence re-emerges for Iberian birds using modern GBIF occurrence data on an equal-area HEALPix-NESTED grid, and what drives hotspot disagreement.
 ```
 
 *Comment length ≈ 480 / 500 chars. Corrected from the Phase-1 draft:

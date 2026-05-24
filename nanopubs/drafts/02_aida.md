@@ -28,7 +28,7 @@ the operational top-5%-richest-cells definition. 192 characters.*
 Predefined topic vocabulary — list the labels you intend to pick from the dropdown.
 
 ```
-biodiversity; species richness; macroecology; spatial scale; range maps
+biodiversity; species richness; macroecology; spatial scale
 ```
 
 *Pick whichever of these the platform dropdown actually offers; if the

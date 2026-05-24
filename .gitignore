@@ -63,3 +63,8 @@ docker-image.tar.gz
 # Claude scratch
 .claude/.cache/
 .claude/local/
+
+# Editor swap files
+*.swp
+*.swo
+*~

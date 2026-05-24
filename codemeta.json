@@ -5,7 +5,7 @@
   "description": "Reproduction and HEALPix-scale extension of Hurlbert & Jetz (2007) on the scale dependence of range-map species richness.",
   "version": "0.1.0",
   "dateCreated": "2026-05-22",
-  "dateModified": "2026-05-22",
+  "dateModified": "2026-05-24",
   "license": "https://spdx.org/licenses/MIT",
   "codeRepository": "https://github.com/annefou/sdm-scale-replication",
   "identifier": "{{ZENODO_DOI}}",

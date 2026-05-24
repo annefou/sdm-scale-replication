@@ -146,7 +146,6 @@ Provide labels (not QIDs) — the Wikidata search picks up labels.
 
 - species richness
 - biodiversity hotspot
-- range map
 - HEALPix
 - GBIF
 
@@ -155,8 +154,6 @@ Provide labels (not QIDs) — the Wikidata search picks up labels.
 Provide labels.
 
 - macroecology
-- conservation biology
-- biogeography
 
 ## Publication note
 
