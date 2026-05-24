@@ -13,6 +13,14 @@ This file is the canonical registry of published nanopub URIs for this replicati
 | 05 | FORRT Replication Outcome | _not yet published_ | |
 | 06 | CiTO Citation | _not yet published_ | |
 
+## Software & data archive (Zenodo)
+
+| Artefact | DOI | Notes |
+|---|---|---|
+| Source — concept DOI | [10.5281/zenodo.20363555](https://doi.org/10.5281/zenodo.20363555) | Resolves to the latest version. |
+| Source — version DOI (v0.1.0) | [10.5281/zenodo.20363556](https://doi.org/10.5281/zenodo.20363556) | This release. |
+| Docker image | _pending docker.yml run / Zenodo upload_ | GHCR `ghcr.io/annefou/sdm-scale-replication`; archived if `ZENODO_TOKEN` secret is set. |
+
 ## Optional layers
 
 | Step | Template | URI | Published |

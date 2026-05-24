@@ -8,8 +8,8 @@
   "dateModified": "2026-05-24",
   "license": "https://spdx.org/licenses/MIT",
   "codeRepository": "https://github.com/annefou/sdm-scale-replication",
-  "identifier": "{{ZENODO_DOI}}",
-  "@id": "{{ZENODO_DOI}}",
+  "identifier": "https://doi.org/10.5281/zenodo.20363555",
+  "@id": "https://doi.org/10.5281/zenodo.20363555",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "Python",
