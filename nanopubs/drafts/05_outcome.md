@@ -65,12 +65,12 @@ rangemap and atlas axes, not to a refutation of the underlying claim.*
 ### Confidence level (dropdown, required)
 
 - [ ] VeryHighConfidence
-- [x] **HighConfidence**
-- [ ] Moderate
+- [ ] **HighConfidence**
+- [x] Moderate
 - [ ] LowConfidence
 - [ ] VeryLowConfidence
 
-*High but not very-high: the evidence base is large (61.7 million GBIF
+*Moderate: the evidence base is large (61.7 million GBIF
 occurrences across 964 species, two basis-of-record strategies, six
 HEALPix-NESTED resolution levels, five independent verification tests),
 direction agreement is unambiguous, and the magnitude disagreement is

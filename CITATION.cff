@@ -9,8 +9,8 @@ authors:
     affiliation: "Lifewatch-ERIC, Spain"
 repository-code: "https://github.com/annefou/sdm-scale-replication"
 license: MIT
-version: "0.1.0"
-date-released: "2026-05-24"
+version: "0.2.0"
+date-released: "2026-05-29"
 doi: "10.5281/zenodo.20363555"
 identifiers:
   - type: doi
